@@ -32,7 +32,12 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_
 
 # === Define Models ===
 models = {
-    "RandomForest": RandomForestClassifier(n_estimators=100, random_state=random_seed),
+    "RandomForest": RandomForestClassifier(
+    n_estimators=10,        # ↓ from 100 → 10
+    max_depth=10,           # limit tree growth
+    max_features='sqrt',    # fewer features per split
+    min_samples_leaf=5,     # regularize leaf size
+    random_state=random_seed),
     "CatBoost": CatBoostClassifier(verbose=0, random_seed=random_seed),
     "XGBoost": XGBClassifier(use_label_encoder=False, eval_metric='logloss', random_state=random_seed),
     "LGBM": LGBMClassifier(random_state=random_seed)
