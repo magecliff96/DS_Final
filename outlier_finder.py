@@ -2,17 +2,60 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import TwoSlopeNorm
+import re
+import os
+
+
+def extract_weights_from_columns(columns):
+    weights = []
+    for i, col in enumerate(columns):
+        match = re.search(r'(\d+)_([0-9]+|plus)', col)
+        if match:
+            low_str, high_str = match.groups()
+            low = int(low_str)
+
+            if high_str == "plus":
+                if i > 0:
+                    # Estimate last bin width using previous bin
+                    prev_low, prev_high = map(int, re.search(r'(\d+)_([0-9]+)', columns[i - 1]).groups())
+                    bin_width = prev_high - prev_low
+                    high = low + bin_width  # or use low + bin_width * 1.5 for conservative
+                else:
+                    high = low + 10  # default fallback
+            else:
+                high = int(high_str)
+
+            midpoint = (low + high) / 2
+            weights.append(midpoint)
+        else:
+            raise ValueError(f"Could not extract bin range from column: {col}")
+    return np.array(weights)
+
+
 
 # === Load and Merge Data ===
 input_df = pd.read_csv('input.csv')
 ground_truth_df = pd.read_csv('ground_truth.csv')
-merged_df = pd.merge(input_df, ground_truth_df, on='sno')
+merged_df = pd.merge(input_df, ground_truth_df, on='record_id')
+OUTPUT_DIR = "outlier"
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+# === Reconstruct Ground Truth Values ===
 
 # === Reconstruct Ground Truth Values ===
-weight_vector = np.array([15, 45, 90])
-merged_df['total_bikes'] = merged_df.filter(like='total_').dot(weight_vector)
-merged_df['rent_bikes'] = merged_df.filter(like='rent_').dot(weight_vector)
-merged_df['return_bikes'] = merged_df.filter(like='return_').dot(weight_vector)
+# Select columns dynamically and compute weights
+total_cols = [col for col in merged_df.columns if col.startswith("total_") and "_" in col]
+rent_cols  = [col for col in merged_df.columns if col.startswith("rent_") and "_" in col]
+return_cols = [col for col in merged_df.columns if col.startswith("return_") and "_" in col]
+
+# Sort the columns to keep bin order consistent
+total_cols.sort()
+rent_cols.sort()
+return_cols.sort()
+
+# Extract weights and compute dot product
+merged_df['total_bikes']  = merged_df[total_cols].dot(extract_weights_from_columns(total_cols))
+merged_df['rent_bikes']   = merged_df[rent_cols].dot(extract_weights_from_columns(rent_cols))
+merged_df['return_bikes'] = merged_df[return_cols].dot(extract_weights_from_columns(return_cols))
 
 
 
@@ -50,15 +93,16 @@ cbar.set_ticklabels([f'{t:.0f}%' for t in ticks])
 
 plt.xlabel('Longitude')
 plt.ylabel('Latitude')
-plt.title(f'Outlier Map - Total Bikes\nMean Predicted Total = {y_pred:.1f}')
+plt.title(f'Outlier Map - Total Bikes\nMean Total = {y_pred:.1f}')
 plt.legend()
 plt.grid(True)
 plt.tight_layout()
-plt.savefig('outlier_map_total_bikes.png')
+plt.savefig(os.path.join(OUTPUT_DIR, 'outlier_map_total_bikes.png'))
 plt.close()
 
 outlier_rows = merged_df.loc[merged_df['is_high_error'] == 1]
-outlier_rows.to_csv('outliers_total_bikes.csv', index=False)
+outlier_rows.to_csv(os.path.join(OUTPUT_DIR, 'outliers_total_bikes.csv'), index=False)
+
 
 
 
@@ -97,11 +141,11 @@ plt.title(f'Outlier Map - Return Bikes\nMean Return = {y_pred:.1f}')
 plt.legend()
 plt.grid(True)
 plt.tight_layout()
-plt.savefig('outlier_map_return_bikes.png')
+plt.savefig(os.path.join(OUTPUT_DIR, 'outlier_map_return_bikes.png'))
 plt.close()
 
 outlier_rows = merged_df.loc[merged_df['is_high_error'] == 1]
-outlier_rows.to_csv('outliers_return_bikes.csv', index=False)
+outlier_rows.to_csv(os.path.join(OUTPUT_DIR, 'outliers_return_bikes.csv'), index=False)
 
 
 
@@ -139,8 +183,8 @@ plt.title(f'Outlier Map - Rent Bikes\nMean Rent = {y_pred:.1f}')
 plt.legend()
 plt.grid(True)
 plt.tight_layout()
-plt.savefig('outlier_map_rent_bikes.png')
+plt.savefig(os.path.join(OUTPUT_DIR, 'outlier_map_rent_bikes.png'))
 plt.close()
 
 outlier_rows = merged_df.loc[merged_df['is_high_error'] == 1]
-outlier_rows.to_csv('outliers_rent_bikes.csv', index=False)
+outlier_rows.to_csv(os.path.join(OUTPUT_DIR, 'outliers_rent_bikes.csv'), index=False)
